@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sound Bites - 16:9 Pro Editor</title>
+    <!-- Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+            overflow: hidden; /* Prevent scrolling on desktop */
+        }
+        @media (max-width: 768px) {
+            body { overflow: auto; }
+        }
+        .aspect-16-9 {
+            aspect-ratio: 16 / 9;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #4f46e5;
+            cursor: pointer;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+            margin-top: -6px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #e0e7ff;
+            border-radius: 4px;
+        }
+        canvas { touch-action: none; }
+        @keyframes countdown-pulse {
+            0% { transform: scale(0.5); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-count {
+            animation: countdown-pulse 0.5s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="bg-[#F8FAFC] bg-[radial-gradient(#E2E8F0_1px,transparent_1px)] [background-size:30px_30px]">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useRef, useEffect, useCallback } = React;
+
+        const Icon = ({ name, size = 24, strokeWidth = 2, className = "", fill = "none" }) => {
+            const icons = {
+                Upload: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>,
+                Mic: <><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1M12 19v3M8 22h8"/></>,
+                Square: <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>,
+                Download: <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>,
+                RotateCcw: <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8M3 3v5h5"/>,
+                Check: <path d="M20 6 9 17l-5-5"/>,
+                Volume2: <><path d="M11 5 6 9H2v6h4l5 4V5Z"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14"/></>,
+                Trash2: <><path d="M3 6h18M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2M10 11v6M14 11v6"/></>,
+                Undo2: <path d="M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11"/>,
+                Camera: <><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></>,
+                Music: <><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></>,
+                AlertCircle: <><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></>,
+                Maximize2: <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>,
+                Search: <><circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/></>,
+                Zap: <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>,
+                SlidersHorizontal: <><line x1="21" x2="14" y1="4" y2="4"/><line x1="10" x2="3" y1="4" y2="4"/><line x1="21" x2="12" y1="12" y2="12"/><line x1="8" x2="3" y1="12" y2="12"/><line x1="21" x2="16" y1="20" y2="20"/><line x1="12" x2="3" y1="20" y2="20"/><line x1="14" x2="14" y1="2" y2="6"/><line x1="8" x2="8" y1="10" y2="14"/><line x1="12" x2="12" y1="18" y2="22"/></>,
+                FileAudio: <><path d="M17.5 22h.5a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><circle cx="9" cy="20" r="1"/><circle cx="15" cy="18" r="1"/><path d="M9 19v-5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v4"/><path d="M9 16h6"/></>,
+                Play: <polygon points="5 3 19 12 5 21 5 3"/>,
+                ArrowLeft: <path d="m12 19-7-7 7-7M5 12h14"/>,
+                Smartphone: <><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><line x1="12" x2="12" y1="18" y2="18"/></>,
+                Pause: <><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></>,
+                Plus: <path d="M12 5v14M5 12h14"/>
+            };
+            return (
+                <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" className={className}>
+                    {icons[name]}
+                </svg>
+            );
+        };
+
+        const App = () => {
+            const [originalImage, setOriginalImage] = useState(null);
+            const [displayImage, setDisplayImage] = useState(null); 
+            const [stage, setStage] = useState('upload'); 
+            const [isRecording, setIsRecording] = useState(false);
+            const [isPaused, setIsPaused] = useState(false);
+            const [mouthPoints, setMouthPoints] = useState([]); 
+            const [isMouthClosed, setIsMouthClosed] = useState(false);
+            const [volume, setVolume] = useState(0);
+            const [mouthSensitivity, setMouthSensitivity] = useState(80); 
+            const [videoUrl, setVideoUrl] = useState(null);
+            const [downloadFormat, setDownloadFormat] = useState('mp4');
+            const [audioSourceType, setAudioSourceType] = useState('mic'); 
+            const [uploadedAudioFile, setUploadedAudioFile] = useState(null);
+            const [zoomRect, setZoomRect] = useState({ x: 0, y: 0, width: 300, height: 300 });
+            const [interactionMode, setInteractionMode] = useState(null); 
+            const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+            
+            const [countdown, setCountdown] = useState(3);
+            const [isCountingDown, setIsCountingDown] = useState(false);
+            const [fileName, setFileName] = useState('my-sound-bite');
+
+            const canvasRef = useRef(null);
+            const zoomCanvasRef = useRef(null);
+            const audioContextRef = useRef(null);
+            const analyserRef = useRef(null);
+            const mediaRecorderRef = useRef(null);
+            const streamRef = useRef(null);
+            const animationFrameRef = useRef(null);
+            const chunksRef = useRef([]);
+            const audioPlayerRef = useRef(null);
+            const smoothedVolumeRef = useRef(0);
+
+            const steps = [
+                { id: 'upload', label: 'Photo' },
+                { id: 'zoom', label: 'Frame' },
+                { id: 'crop', label: 'Mouth' },
+                { id: 'record', label: 'Sound' }
+            ];
+
+            const activeStepIndex = stage === 'preview' ? 4 : steps.findIndex(s => s.id === stage);
+
+            // AUTO-REQUEST MIC ON LOAD
+            useEffect(() => {
+                const requestInitialMic = async () => {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        stream.getTracks().forEach(track => track.stop());
+                        console.log("Mic access pre-authorized.");
+                    } catch (err) {
+                        console.warn("Initial mic request denied or deferred:", err);
+                    }
+                };
+                requestInitialMic();
+            }, []);
+
+            const handleImageUpload = async (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    try { await navigator.mediaDevices.getUserMedia({ audio: true }).then(s => s.getTracks().forEach(t => t.stop())); } catch(e) {}
+
+                    const reader = new FileReader();
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            setOriginalImage(img);
+                            setStage('zoom');
+                            const initialSize = Math.min(img.width, img.height) * 0.6;
+                            setZoomRect({ x: (img.width - initialSize)/2, y: (img.height - initialSize)/2, width: initialSize, height: initialSize });
+                        };
+                        img.src = event.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const handleAudioUpload = (e) => {
+                const file = e.target.files[0];
+                if (file) { 
+                    setUploadedAudioFile(file); 
+                    if (streamRef.current) {
+                        streamRef.current.getTracks().forEach(t => t.stop());
+                        streamRef.current = null;
+                    }
+                }
+            };
+
+            const getPreciseCoords = (e, canvas, sourceW, sourceH) => {
+                if (!canvas) return { x: 0, y: 0 };
+                const rect = canvas.getBoundingClientRect();
+                const style = window.getComputedStyle(canvas);
+                const isContain = style.objectFit === 'contain';
+
+                if (!isContain) {
+                    const scaleX = sourceW / rect.width;
+                    const scaleY = sourceH / rect.height;
+                    return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
+                }
+
+                const canvasRatio = rect.width / rect.height;
+                const sourceRatio = sourceW / sourceH;
+                let scale, xOffset = 0, yOffset = 0;
+
+                if (sourceRatio > canvasRatio) {
+                    scale = sourceW / rect.width;
+                    const displayedH = sourceH / scale;
+                    yOffset = (rect.height - displayedH) / 2;
+                } else {
+                    scale = sourceH / rect.height;
+                    const displayedW = sourceW / scale;
+                    xOffset = (rect.width - displayedW) / 2;
+                }
+
+                return {
+                    x: (e.clientX - rect.left - xOffset) * scale,
+                    y: (e.clientY - rect.top - yOffset) * scale
+                };
+            };
+
+            useEffect(() => {
+                if (!interactionMode || stage !== 'zoom') return;
+                const handleGlobalMove = (e) => {
+                    const coords = getPreciseCoords(e, zoomCanvasRef.current, originalImage.width, originalImage.height);
+                    if (interactionMode === 'drag') {
+                        setZoomRect(prev => ({
+                            ...prev,
+                            x: Math.max(0, Math.min(coords.x - dragOffset.x, originalImage.width - prev.width)),
+                            y: Math.max(0, Math.min(coords.y - dragOffset.y, originalImage.height - prev.height))
+                        }));
+                    } else if (interactionMode === 'resize') {
+                        setZoomRect(prev => ({
+                            ...prev,
+                            width: Math.max(50, Math.min(coords.x - prev.x, originalImage.width - prev.x)),
+                            height: Math.max(50, Math.min(coords.y - prev.y, originalImage.height - prev.y))
+                        }));
+                    }
+                };
+                const handleGlobalUp = () => setInteractionMode(null);
+                window.addEventListener('mousemove', handleGlobalMove);
+                window.addEventListener('mouseup', handleGlobalUp);
+                return () => { window.removeEventListener('mousemove', handleGlobalMove); window.removeEventListener('mouseup', handleGlobalUp); };
+            }, [interactionMode, dragOffset, originalImage, stage]);
+
+            const handleZoomDown = (e) => {
+                if (!zoomCanvasRef.current) return;
+                const coords = getPreciseCoords(e, zoomCanvasRef.current, originalImage.width, originalImage.height);
+                const rect = zoomCanvasRef.current.getBoundingClientRect();
+                const handleBuffer = 50 * (originalImage.width / rect.width);
+                if (coords.x > zoomRect.x + zoomRect.width - handleBuffer && coords.y > zoomRect.y + zoomRect.height - handleBuffer) {
+                    setInteractionMode('resize');
+                } else if (coords.x > zoomRect.x && coords.x < zoomRect.x + zoomRect.width && coords.y > zoomRect.y && coords.y < zoomRect.y + zoomRect.height) {
+                    setInteractionMode('drag');
+                    setDragOffset({ x: coords.x - zoomRect.x, y: coords.y - zoomRect.y });
+                }
+            };
+
+            const applyZoom = () => {
+                const tempCanvas = document.createElement('canvas');
+                const maxDim = 1000;
+                let targetW, targetH;
+                if (zoomRect.width >= zoomRect.height) {
+                    targetW = maxDim; targetH = (zoomRect.height / zoomRect.width) * maxDim;
+                } else {
+                    targetH = maxDim; targetW = (zoomRect.width / zoomRect.height) * maxDim;
+                }
+                tempCanvas.width = targetW; tempCanvas.height = targetH;
+                const tCtx = tempCanvas.getContext('2d');
+                tCtx.drawImage(originalImage, zoomRect.x, zoomRect.y, zoomRect.width, zoomRect.height, 0, 0, targetW, targetH);
+                const croppedImg = new Image();
+                croppedImg.onload = () => { setDisplayImage(croppedImg); setMouthPoints([]); setIsMouthClosed(false); setStage('crop'); };
+                croppedImg.src = tempCanvas.toDataURL();
+            };
+
+            const handleMouthClick = (e) => {
+                if (stage !== 'crop' || isMouthClosed) return;
+                const coords = getPreciseCoords(e, canvasRef.current, displayImage.width, displayImage.height);
+                
+                if (mouthPoints.length >= 3) {
+                    const dist = Math.sqrt(Math.pow(coords.x - mouthPoints[0].x, 2) + Math.pow(coords.y - mouthPoints[0].y, 2));
+                    const rect = canvasRef.current.getBoundingClientRect();
+                    const hitRadius = 15 * (displayImage.width / rect.width);
+                    
+                    if (dist < hitRadius) { 
+                        setIsMouthClosed(true); 
+                        if (audioSourceType === 'mic') startAudioPreview(); 
+                        return; 
+                    }
+                }
+                
+                if (mouthPoints.length < 10) {
+                    setMouthPoints(p => [...p, coords]);
+                }
+            };
+
+            const startAudioPreview = async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    streamRef.current = stream;
+                    if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                    const source = audioContextRef.current.createMediaStreamSource(stream);
+                    setupAnalyser(source);
+                } catch (err) { console.error(err); }
+            };
+
+            const setupAnalyser = (source) => {
+                if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                analyserRef.current = audioContextRef.current.createAnalyser();
+                analyserRef.current.fftSize = 512; analyserRef.current.smoothingTimeConstant = 0.4; 
+                source.connect(analyserRef.current);
+                const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+                const updateVolume = () => {
+                    if (!analyserRef.current) return;
+                    analyserRef.current.getByteFrequencyData(dataArray);
+                    let sum = 0, count = 0;
+                    for (let i = 2; i < 40; i++) { sum += dataArray[i]; count++; }
+                    const rawAverage = sum / count;
+                    const gate = 45, normalized = Math.max(0, rawAverage - gate) / (255 - gate);
+                    const curved = Math.pow(normalized, 1.6) * 255;
+                    smoothedVolumeRef.current = smoothedVolumeRef.current + (curved - smoothedVolumeRef.current) * 0.6;
+                    setVolume(smoothedVolumeRef.current);
+                    animationFrameRef.current = requestAnimationFrame(updateVolume);
+                };
+                updateVolume();
+            };
+
+            const drawCanvas = useCallback((currentVolume = 0) => {
+                const canvas = canvasRef.current;
+                if (!canvas || !displayImage) return;
+                const ctx = canvas.getContext('2d');
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(displayImage, 0, 0);
+                if (isMouthClosed && mouthPoints.length > 2) {
+                    const shift = (currentVolume / 180) * mouthSensitivity; 
+                    ctx.fillStyle = '#1a0505'; ctx.beginPath(); ctx.moveTo(mouthPoints[0].x, mouthPoints[0].y);
+                    mouthPoints.forEach(p => ctx.lineTo(p.x, p.y)); ctx.closePath(); ctx.fill();
+                    ctx.save();
+                    ctx.beginPath(); ctx.moveTo(mouthPoints[0].x, mouthPoints[0].y + shift);
+                    mouthPoints.forEach(p => ctx.lineTo(p.x, p.y + shift)); ctx.closePath(); ctx.clip();
+                    ctx.drawImage(displayImage, 0, shift);
+                    ctx.restore();
+                }
+                if (stage === 'crop' && mouthPoints.length > 0) {
+                    ctx.strokeStyle = isMouthClosed ? '#4ADE80' : '#F472B6'; ctx.lineWidth = 6;
+                    ctx.beginPath(); ctx.moveTo(mouthPoints[0].x, mouthPoints[0].y);
+                    mouthPoints.forEach(p => ctx.lineTo(p.x, p.y)); if (isMouthClosed) ctx.closePath(); ctx.stroke();
+                    mouthPoints.forEach((p, i) => {
+                        const isFirst = i === 0;
+                        ctx.fillStyle = (mouthPoints.length >= 3 && i === 0 && !isMouthClosed) ? '#FACC15' : '#FFF'; 
+                        ctx.beginPath(); ctx.arc(p.x, p.y, i === 0 ? 12 : 8, 0, Math.PI * 2);
+                        ctx.fill(); ctx.stroke();
+                    });
+                }
+            }, [displayImage, mouthPoints, isMouthClosed, stage, mouthSensitivity]);
+
+            useEffect(() => {
+                if (stage === 'zoom' && originalImage) {
+                    const ctx = zoomCanvasRef.current.getContext('2d');
+                    ctx.clearRect(0, 0, zoomCanvasRef.current.width, zoomCanvasRef.current.height);
+                    ctx.drawImage(originalImage, 0, 0);
+                    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                    ctx.fillRect(0, 0, originalImage.width, zoomRect.y); 
+                    ctx.fillRect(0, zoomRect.y + zoomRect.height, originalImage.width, originalImage.height); 
+                    ctx.fillRect(0, zoomRect.y, zoomRect.x, zoomRect.height); 
+                    ctx.fillRect(zoomRect.x + zoomRect.width, zoomRect.y, originalImage.width, zoomRect.height); 
+                    ctx.strokeStyle = '#6366F1'; ctx.lineWidth = originalImage.width / 150;
+                    ctx.strokeRect(zoomRect.x, zoomRect.y, zoomRect.width, zoomRect.height);
+                    const hSize = originalImage.width / 40;
+                    ctx.fillStyle = '#6366F1';
+                    ctx.beginPath(); ctx.arc(zoomRect.x + zoomRect.width, zoomRect.y + zoomRect.height, hSize, 0, Math.PI*2);
+                    ctx.fill(); ctx.strokeStyle = 'white'; ctx.lineWidth = originalImage.width / 300; ctx.stroke();
+                }
+            }, [stage, originalImage, zoomRect]);
+
+            useEffect(() => { drawCanvas(volume); }, [drawCanvas, volume]);
+
+            const handleStartClick = async () => {
+                if (audioSourceType === 'mic') {
+                    try {
+                        if (!streamRef.current || streamRef.current.getAudioTracks().length === 0) {
+                            streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        }
+                        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                            await audioContextRef.current.resume();
+                        }
+                    } catch (err) {
+                        console.error("Mic init error:", err);
+                        return;
+                    }
+                }
+                setCountdown(3);
+                setIsCountingDown(true);
+            };
+
+            useEffect(() => {
+                let timer;
+                if (isCountingDown) {
+                    if (countdown > 0) {
+                        timer = setTimeout(() => setCountdown(prev => prev - 1), 1000);
+                    } else {
+                        setIsCountingDown(false);
+                        startRecording();
+                    }
+                }
+                return () => clearTimeout(timer);
+            }, [isCountingDown, countdown]);
+
+            const startRecording = async () => {
+                try {
+                    if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                        await audioContextRef.current.resume();
+                    }
+
+                    const strictMp4 = 'video/mp4;codecs=avc1.42E01E,mp4a.40.2';
+                    const webmPcm = 'video/webm;codecs=vp8,pcm';
+                    let mimeType = MediaRecorder.isTypeSupported(strictMp4) ? strictMp4 : (MediaRecorder.isTypeSupported(webmPcm) ? webmPcm : 'video/webm');
+                    let extension = mimeType.includes('mp4') ? 'mp4' : 'webm';
+                    
+                    setDownloadFormat(extension);
+
+                    const canvasStream = canvasRef.current.captureStream(30);
+                    let audioTrack;
+
+                    if (audioSourceType === 'mic') {
+                        if (!streamRef.current || streamRef.current.getAudioTracks().length === 0) {
+                            streamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        }
+                        audioTrack = streamRef.current.getAudioTracks()[0];
+                    } else {
+                        if (!audioContextRef.current) audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                        const audio = new Audio(URL.createObjectURL(uploadedAudioFile));
+                        audioPlayerRef.current = audio;
+                        const source = audioContextRef.current.createMediaElementSource(audio);
+                        const destination = audioContextRef.current.createMediaStreamDestination();
+                        source.connect(audioContextRef.current.destination);
+                        source.connect(destination);
+                        setupAnalyser(source);
+                        audioTrack = destination.stream.getAudioTracks()[0];
+                        audio.onended = () => finishRecording();
+                        audio.play();
+                    }
+
+                    const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), audioTrack]);
+                    const options = { mimeType };
+                    if (!mimeType.includes('pcm')) {
+                        options.videoBitsPerSecond = 2500000;
+                        options.audioBitsPerSecond = 128000;
+                    }
+
+                    mediaRecorderRef.current = new MediaRecorder(combinedStream, options);
+                    chunksRef.current = [];
+                    mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+                    mediaRecorderRef.current.onstop = () => { 
+                        const blob = new Blob(chunksRef.current, { type: mimeType });
+                        setVideoUrl(URL.createObjectURL(blob)); 
+                    };
+                    
+                    mediaRecorderRef.current.start();
+                    setIsRecording(true);
+                    setIsPaused(false);
+                    setStage('record');
+                } catch (err) { console.error("Capture Error:", err); }
+            };
+
+            const togglePause = () => {
+                if (!mediaRecorderRef.current) return;
+                if (isPaused) {
+                    mediaRecorderRef.current.resume();
+                    if (audioPlayerRef.current) audioPlayerRef.current.play();
+                    setIsPaused(false);
+                } else {
+                    mediaRecorderRef.current.pause();
+                    if (audioPlayerRef.current) audioPlayerRef.current.pause();
+                    setIsPaused(true);
+                }
+            };
+
+            const finishRecording = () => {
+                if (mediaRecorderRef.current) {
+                    mediaRecorderRef.current.requestData();
+                    mediaRecorderRef.current.stop();
+                    mediaRecorderRef.current.onstop = () => {
+                        const blob = new Blob(chunksRef.current, { type: mediaRecorderRef.current.mimeType });
+                        setVideoUrl(URL.createObjectURL(blob));
+                        setIsRecording(false); 
+                        setIsPaused(false); 
+                        setVolume(0); 
+                        setStage('preview');
+                    };
+                }
+                if (audioPlayerRef.current) { audioPlayerRef.current.pause(); audioPlayerRef.current = null; }
+                if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+                cancelAnimationFrame(animationFrameRef.current);
+                if (audioContextRef.current) { audioContextRef.current.close(); audioContextRef.current = null; }
+            };
+
+            const reset = () => {
+                setOriginalImage(null); setDisplayImage(null); setStage('upload'); setVideoUrl(null);
+                setMouthPoints([]); setIsMouthClosed(false); setInteractionMode(null);
+                setUploadedAudioFile(null); setAudioSourceType('mic'); setIsPaused(false); setIsRecording(false);
+                smoothedVolumeRef.current = 0; if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null; }
+            };
+
+            const goBackToRecord = () => {
+                setVideoUrl(null); setVolume(0); smoothedVolumeRef.current = 0; setStage('record');
+                setIsRecording(false); setIsPaused(false);
+                if (audioSourceType === 'mic') startAudioPreview();
+            };
+
+            return (
+                <div className="h-screen flex flex-col bg-slate-50">
+                    {/* Compact Navbar */}
+                    <header className="bg-white border-b flex items-center justify-between px-6 py-3 shadow-sm z-20">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-indigo-600 p-1.5 rounded-lg text-white">
+                                <Icon name="Volume2" size={20} strokeWidth={3} />
+                            </div>
+                            <h1 className="text-xl font-black tracking-tight italic text-indigo-900">SOUND BITES</h1>
+                        </div>
+
+                        {/* Centered Stepper */}
+                        <div className="hidden md:flex items-center gap-8">
+                            {steps.map((step, idx) => (
+                                <div key={step.id} className="flex items-center gap-2">
+                                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black ${idx <= activeStepIndex ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-400'}`}>
+                                        {idx < activeStepIndex ? <Icon name="Check" size={12} strokeWidth={4} /> : idx + 1}
+                                    </div>
+                                    <span className={`text-[11px] font-bold uppercase tracking-wider ${idx <= activeStepIndex ? 'text-indigo-900' : 'text-slate-400'}`}>
+                                        {step.label}
+                                    </span>
+                                    {idx < steps.length - 1 && <div className="w-4 h-0.5 bg-slate-200" />}
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="flex items-center gap-4">
+                            {stage !== 'upload' && <button onClick={reset} className="text-[10px] font-bold text-slate-400 hover:text-indigo-600 uppercase">Start Over</button>}
+                            <div className="text-[10px] px-3 py-1 bg-indigo-50 text-indigo-600 rounded-full font-bold uppercase">PRO</div>
+                        </div>
+                    </header>
+
+                    {/* Main Content Area: 16:9 Driven */}
+                    <main className="flex-1 flex overflow-hidden p-6 gap-6 max-w-screen-2xl mx-auto w-full">
+                        
+                        {stage === 'upload' ? (
+                            /* FULL WIDTH UPLOAD */
+                            <div className="w-full h-full flex items-center justify-center">
+                                <label className="w-full max-w-2xl aspect-video bg-white rounded-[2rem] border-4 border-dashed border-indigo-100 flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all shadow-xl group">
+                                    <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
+                                    <div className="w-20 h-20 bg-indigo-600 rounded-2xl flex items-center justify-center text-white mb-6 group-hover:scale-110 transition-transform shadow-lg">
+                                        <Icon name="Camera" size={32} />
+                                    </div>
+                                    <h3 className="text-2xl font-black text-indigo-900">Choose a Photo to Animate</h3>
+                                    <p className="text-slate-400 mt-2 font-medium italic">Click to grant mic permission & select a file</p>
+                                </label>
+                            </div>
+                        ) : (
+                            /* SPLIT VIEW FOR EDITOR */
+                            <div className="flex flex-1 w-full gap-6 overflow-hidden">
+                                
+                                {/* LEFT: PREVIEW STAGE */}
+                                <div className="flex-[3] bg-white rounded-[2rem] shadow-xl border-4 border-white flex flex-col overflow-hidden relative">
+                                    <div className="flex-1 bg-slate-100 flex items-center justify-center relative overflow-hidden">
+                                        {stage === 'zoom' && (
+                                            <canvas ref={zoomCanvasRef} width={originalImage?.width} height={originalImage?.height} onMouseDown={handleZoomDown} className="max-w-full max-h-full object-contain cursor-move touch-none" />
+                                        )}
+                                        {(stage === 'crop' || stage === 'record') && (
+                                            <div className="relative w-full h-full flex items-center justify-center">
+                                                <canvas ref={canvasRef} width={displayImage?.width} height={displayImage?.height} onClick={handleMouthClick} className={`max-w-full max-h-full object-contain touch-none ${stage === 'crop' && !isMouthClosed ? 'cursor-crosshair' : ''}`} />
+                                                
+                                                {isCountingDown && (
+                                                    <div className="absolute inset-0 z-50 flex items-center justify-center bg-indigo-900/40 backdrop-blur-[2px]">
+                                                        <div className="text-9xl font-black text-white animate-count drop-shadow-2xl">{countdown}</div>
+                                                    </div>
+                                                )}
+                                                
+                                                {stage === 'crop' && !isMouthClosed && mouthPoints.length >= 3 && (
+                                                    <div className="absolute top-4 bg-yellow-400 text-indigo-900 px-4 py-2 rounded-full font-black text-xs animate-bounce border-2 border-white shadow-lg">
+                                                        CLICK FIRST POINT TO CLOSE
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                        {stage === 'preview' && (
+                                            <div className="w-full h-full flex items-center justify-center bg-black">
+                                                {videoUrl && <video src={videoUrl} controls autoPlay className="max-w-full max-h-full" />}
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="bg-white px-6 py-2 border-t flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                                        <div className="flex items-center gap-2">
+                                            <div className={`w-2 h-2 rounded-full ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-green-400'}`} />
+                                            {stage.toUpperCase()} MODE
+                                        </div>
+                                        <div>1080P CANVAS</div>
+                                    </div>
+                                </div>
+
+                                {/* RIGHT: CONTROLS */}
+                                <div className="flex-1 bg-indigo-900 rounded-[2rem] shadow-xl p-8 flex flex-col justify-between text-white overflow-y-auto">
+                                    <div>
+                                        <h2 className="text-2xl font-black italic mb-2 tracking-tight">
+                                            {stage === 'zoom' && "Step 2: Frame It"}
+                                            {stage === 'crop' && "Step 3: Mouth Shape"}
+                                            {stage === 'record' && "Step 4: Speak Up"}
+                                            {stage === 'preview' && "Finishing Touches"}
+                                        </h2>
+                                        <p className="text-indigo-200 text-xs font-medium mb-8 leading-relaxed">
+                                            {stage === 'zoom' && "Drag the box to focus on the mouth area."}
+                                            {stage === 'crop' && "Tap 3 to 10 points around the mouth."}
+                                            {stage === 'record' && "Choose MIC or UPLOAD, then hit the record button!"}
+                                            {stage === 'preview' && "Looking good! You can re-record if you need another try."}
+                                        </p>
+
+                                        <div className="space-y-6">
+                                            {stage === 'zoom' && (
+                                                <button onClick={applyZoom} className="w-full py-4 bg-white text-indigo-600 rounded-2xl font-black shadow-lg hover:bg-indigo-50 transition-colors flex items-center justify-center gap-2">
+                                                    CONFIRM FRAME <Icon name="Check" size={18} />
+                                                </button>
+                                            )}
+
+                                            {stage === 'crop' && (
+                                                <>
+                                                    <div className="bg-indigo-800/50 p-4 rounded-2xl border border-indigo-700">
+                                                        <div className="flex justify-between text-[10px] font-black uppercase mb-3">
+                                                            <span>Points</span>
+                                                            <span>{mouthPoints.length}/10</span>
+                                                        </div>
+                                                        <div className="flex gap-1.5 h-1.5">
+                                                            {[...Array(10)].map((_, i) => <div key={i} className={`flex-1 rounded-full transition-all ${i < mouthPoints.length ? 'bg-indigo-400' : 'bg-indigo-950'}`} />)}
+                                                        </div>
+                                                    </div>
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                        <button onClick={() => { setMouthPoints(p => p.slice(0, -1)); setIsMouthClosed(false); }} className="py-3 bg-indigo-800 rounded-xl text-xs font-bold hover:bg-indigo-700 transition-colors flex items-center justify-center gap-2">
+                                                            <Icon name="Undo2" size={14} /> UNDO
+                                                        </button>
+                                                        <button onClick={() => { setMouthPoints([]); setIsMouthClosed(false); }} className="py-3 bg-red-900/30 rounded-xl text-xs font-bold text-red-300 hover:bg-red-900/50 transition-colors flex items-center justify-center gap-2">
+                                                            <Icon name="Trash2" size={14} /> CLEAR
+                                                        </button>
+                                                    </div>
+                                                    <button disabled={!isMouthClosed} onClick={() => setStage('record')} className={`w-full py-5 rounded-2xl font-black shadow-lg transition-all flex items-center justify-center gap-3 ${isMouthClosed ? 'bg-white text-indigo-600 hover:scale-[1.02]' : 'bg-indigo-800 text-indigo-400 cursor-not-allowed opacity-50'}`}>
+                                                        {isMouthClosed ? 'NEXT STEP' : 'CLOSE SHAPE'} <Icon name="ArrowLeft" size={18} className="rotate-180" />
+                                                    </button>
+                                                </>
+                                            )}
+
+                                            {stage === 'record' && (
+                                                <div className="space-y-6">
+                                                    {!isRecording && !isCountingDown && (
+                                                        <>
+                                                            <div className="flex bg-indigo-950 p-1 rounded-xl shadow-inner">
+                                                                <button onClick={() => setAudioSourceType('mic')} className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${audioSourceType === 'mic' ? 'bg-indigo-600 text-white' : 'text-indigo-400'}`}>MIC</button>
+                                                                <button onClick={() => setAudioSourceType('file')} className={`flex-1 py-2 rounded-lg text-[10px] font-bold transition-all ${audioSourceType === 'file' ? 'bg-indigo-600 text-white' : 'text-indigo-400'}`}>UPLOAD</button>
+                                                            </div>
+
+                                                            {audioSourceType === 'file' && (
+                                                                <label className={`w-full flex items-center justify-center gap-3 p-4 border-2 border-dashed rounded-xl cursor-pointer transition-all ${uploadedAudioFile ? 'bg-indigo-800 border-indigo-400 text-white shadow-lg' : 'bg-indigo-950/50 border-indigo-800 text-indigo-400 hover:border-indigo-600'}`}>
+                                                                    <input type="file" className="hidden" accept="audio/*" onChange={handleAudioUpload} />
+                                                                    <Icon name={uploadedAudioFile ? "Check" : "Upload"} size={16} />
+                                                                    <span className="text-[10px] font-bold truncate max-w-[150px]">{uploadedAudioFile ? uploadedAudioFile.name : 'Choose Audio File'}</span>
+                                                                </label>
+                                                            )}
+                                                        </>
+                                                    )}
+
+                                                    <div className="space-y-3">
+                                                        <div className="flex justify-between text-[10px] font-black uppercase tracking-widest text-indigo-300">
+                                                            <span>Mouth Power</span>
+                                                            <span>{mouthSensitivity}%</span>
+                                                        </div>
+                                                        <input type="range" min="10" max="150" value={mouthSensitivity} onChange={(e) => setMouthSensitivity(Number(e.target.value))} className="w-full accent-indigo-400" />
+                                                    </div>
+
+                                                    <div className="flex flex-col items-center gap-4">
+                                                        {!isCountingDown && (
+                                                            <div className="flex gap-4">
+                                                                {!isRecording ? (
+                                                                    <button 
+                                                                        disabled={audioSourceType === 'file' && !uploadedAudioFile}
+                                                                        onClick={handleStartClick}
+                                                                        className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-xl
+                                                                            ${audioSourceType === 'file' && !uploadedAudioFile ? 'bg-slate-700 text-slate-500 cursor-not-allowed' : 'bg-red-500 text-white hover:scale-105 active:scale-95'}
+                                                                        `}
+                                                                    >
+                                                                        {audioSourceType === 'mic' ? <Icon name="Mic" size={32} strokeWidth={3} /> : <Icon name="Play" size={32} className="ml-1" fill="currentColor" />}
+                                                                    </button>
+                                                                ) : (
+                                                                    <>
+                                                                        <button onClick={togglePause} className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-xl ${isPaused ? 'bg-green-500' : 'bg-yellow-500'} text-white`}>
+                                                                            {isPaused ? <Icon name="Mic" size={28} strokeWidth={3} /> : <Icon name="Pause" size={28} className="fill-current" />}
+                                                                        </button>
+                                                                        <button onClick={finishRecording} className="w-20 h-20 bg-white text-indigo-900 rounded-full flex items-center justify-center shadow-xl hover:scale-105 active:scale-95">
+                                                                            <Icon name="Check" size={32} strokeWidth={4} />
+                                                                        </button>
+                                                                    </>
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {stage === 'preview' && (
+                                                <div className="space-y-4">
+                                                    <div>
+                                                        <label className="text-[10px] font-black uppercase text-indigo-300 mb-2 block">Name your video</label>
+                                                        <div className="flex items-center bg-indigo-950 p-3 rounded-xl border border-indigo-700 focus-within:border-white">
+                                                            <input type="text" value={fileName} onChange={(e) => setFileName(e.target.value)} className="bg-transparent border-none outline-none text-white font-bold w-full text-sm" />
+                                                            <span className="text-[10px] text-indigo-400 font-bold">.{downloadFormat}</span>
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <a href={videoUrl} download={`${fileName}.${downloadFormat}`} className="w-full py-4 bg-green-500 text-white rounded-2xl font-black shadow-lg flex items-center justify-center gap-2 hover:bg-green-400 transition-colors">
+                                                        <Icon name="Download" size={18} /> SAVE VIDEO
+                                                    </a>
+                                                    
+                                                    <div className="pt-4 border-t border-indigo-800 flex flex-col gap-3">
+                                                        <button onClick={goBackToRecord} className="w-full py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs flex items-center justify-center gap-2 hover:bg-indigo-50 transition-colors">
+                                                            <Icon name="Mic" size={14} strokeWidth={3} /> RE-RECORD SOUND
+                                                        </button>
+                                                        <button onClick={reset} className="w-full py-3 bg-indigo-800 text-indigo-400 rounded-2xl font-black text-[10px] flex items-center justify-center gap-2 hover:bg-indigo-700 hover:text-indigo-200 transition-colors">
+                                                            <Icon name="RotateCcw" size={12} /> TRY NEW PHOTO
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="mt-8 flex justify-center gap-1 h-6 items-end">
+                                        {[...Array(15)].map((_, i) => (
+                                            <div key={i} className={`w-1 rounded-full transition-all duration-75 ${isRecording && !isPaused ? 'bg-indigo-400' : 'bg-indigo-950'}`} style={{ height: (isRecording && !isPaused) ? `${30 + Math.random() * 70}%` : '20%' }} />
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+
+                    <footer className="px-10 py-3 bg-white border-t flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-widest z-10">
+                        <div>SOUND BITES 🦟 • Class-Ready Pro Editor</div>
+                        <div className="flex gap-4">
+                            <span>PERMISSION PRE-AUTHORIZED</span>
+                            <span>WEBGL RENDERER</span>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
